@@ -56,7 +56,8 @@ echo "Creating admin user: aman"
 if id "aman" &>/dev/null; then
     echo "User aman already exists"
 else
-    adduser aman
+    useradd -m -s /bin/bash aman
+    echo "aman:password" | chpasswd
 fi
 
 usermod -aG sudo aman
@@ -85,6 +86,9 @@ apt install -y xfce4 xfce4-goodies
 echo "startxfce4" > /home/aman/.xsession
 chown aman:aman /home/aman/.xsession
 chmod 644 /home/aman/.xsession
+
+# XRDP black screen fix
+echo "startxfce4" > /etc/skel/.xsession
 
 # ------------------------------
 # Install XRDP
@@ -120,9 +124,14 @@ fi
 echo "Applying RAM optimizations..."
 
 echo "vm.swappiness=10" >> /etc/sysctl.conf
+echo "vm.overcommit_memory=1" >> /etc/sysctl.conf
 echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.conf
 echo "vm.dirty_ratio=10" >> /etc/sysctl.conf
 echo "vm.dirty_background_ratio=5" >> /etc/sysctl.conf
+
+# Disk cache optimization
+echo "vm.dirty_expire_centisecs=500" >> /etc/sysctl.conf
+echo "vm.dirty_writeback_centisecs=100" >> /etc/sysctl.conf
 
 sysctl -p
 
@@ -151,6 +160,7 @@ apt remove firefox -y || true
 apt purge firefox -y || true
 snap remove firefox || true
 apt autoremove -y
+apt autoclean
 
 # ------------------------------
 # Install Firefox (Mozilla repo)
@@ -196,6 +206,11 @@ echo "Installing Tailscale..."
 
 curl -fsSL https://tailscale.com/install.sh | sh
 
+systemctl enable tailscaled
+systemctl start tailscaled
+
+tailscale up
+
 # ------------------------------
 # Finish
 # ------------------------------
@@ -203,10 +218,9 @@ echo "================================="
 echo " VPS SETUP COMPLETE"
 echo "================================="
 echo "User: aman"
-echo "Password: (the one you created)"
+echo "Password: password"
 echo ""
 echo "Next steps:"
-echo "1. Run: tailscale up"
-echo "2. Connect RDP via tailscale IP"
-echo "3. Reboot manually when ready"
+echo "Connect RDP via Tailscale IP"
+echo "Reboot VPS when ready"
 echo "================================="
