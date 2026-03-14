@@ -27,7 +27,7 @@ This script automatically:
 
 🎬 Installation Demo
 
-"Install Demo" (https://raw.githubusercontent.com/technicalboy2023/vps-master-setup/main/assets/install-demo.gif)
+"Install Demo" (https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=2000&pause=800&color=00FF9C&center=true&vCenter=true&width=600&lines=curl+-s+https://raw.githubusercontent.com/technicalboy2023/vps-master-setup/main/install.sh+%7C+bash;Updating+Ubuntu+System...;Installing+XFCE+Desktop...;Configuring+XRDP...;Installing+Tailscale+VPN...;Applying+RAM+Optimizations...;VPS+Setup+Complete!)
 
 ---
 
@@ -38,7 +38,9 @@ This script automatically:
 - Root SSH login disabled
 - Fail2Ban enabled
 - UFW firewall configured
-- Secure sudo user
+- Secure sudo admin user
+
+---
 
 🖥 Desktop Environment
 
@@ -47,13 +49,17 @@ This script automatically:
 - XRDP black screen fix
 - Software rendering enabled
 
-🌐 Networking
+---
+
+🌐 Private Remote Access
 
 - Tailscale VPN installed
-- Private remote desktop access
+- Secure RDP access via private network
 - Public RDP port blocked
 
-⚡ Performance Optimization
+---
+
+⚙️ Performance Optimization
 
 The script applies kernel tuning:
 
@@ -77,7 +83,7 @@ CPU| 1 vCPU
 
 ---
 
-👤 Login Credentials
+👤 Default Login Credentials
 
 User: aman
 Password: password
@@ -94,7 +100,7 @@ Start Tailscale:
 
 tailscale up
 
-Get IP:
+Get your Tailscale IP:
 
 tailscale ip
 
@@ -119,7 +125,7 @@ XRDP Server
    ▼
 XFCE Desktop
 
-Public port 3389 blocked for security.
+Public RDP port 3389 blocked for security.
 
 ---
 
@@ -135,22 +141,29 @@ vps-master-setup
 │
 ├ install.sh
 ├ README.md
-├ LICENSE
-└ assets
-     └ install-demo.gif
+└ .github
+    └ workflows
+        └ script-check.yml
 
 ---
 
 🧠 Use Cases
 
 - Remote desktop VPS
-- AI / n8n automation
-- Docker servers
+- Automation servers
+- AI tools
+- n8n workflows
 - Development environments
 - Disposable monthly VPS
 
 ---
 
+📜 License
+
+MIT License
+
+---
+
 ⭐ Support
 
-If this project helped you, please give it a star ⭐
+If this project helped you, consider giving it a GitHub Star ⭐
