@@ -11,13 +11,15 @@
 
 ⚡ One Command Installation
 
+Run this command on a fresh Ubuntu 22.04 VPS:
+
 curl -s https://raw.githubusercontent.com/technicalboy2023/vps-master-setup/main/install.sh | bash
 
 This script automatically:
 
 ✔ Updates Ubuntu
 ✔ Installs XFCE desktop
-✔ Configures XRDP
+✔ Configures XRDP remote desktop
 ✔ Installs Tailscale VPN
 ✔ Applies RAM optimizations
 ✔ Installs browsers
@@ -36,9 +38,9 @@ This script automatically:
 🔐 Security
 
 - Root SSH login disabled
-- Fail2Ban enabled
-- UFW firewall configured
-- Secure sudo admin user
+- Fail2Ban protection
+- UFW firewall enabled
+- Secure admin user
 
 ---
 
@@ -51,17 +53,17 @@ This script automatically:
 
 ---
 
-🌐 Private Remote Access
+🌐 Remote Access
 
 - Tailscale VPN installed
-- Secure RDP access via private network
+- Secure private network RDP
 - Public RDP port blocked
 
 ---
 
 ⚙️ Performance Optimization
 
-The script applies kernel tuning:
+Kernel tuning applied:
 
 vm.swappiness=10
 vm.overcommit_memory=1
@@ -73,59 +75,28 @@ vm.dirty_writeback_centisecs=100
 
 ---
 
-📋 System Requirements
-
-Requirement| Minimum
-OS| Ubuntu 22.04
-RAM| 2 GB
-Disk| 15 GB
-CPU| 1 vCPU
-
----
-
-👤 Default Login Credentials
+👤 Default Login
 
 User: aman
 Password: password
 
-⚠ Change password immediately:
+Change password after login:
 
 passwd aman
 
 ---
 
-🌐 Remote Desktop Access
+🌐 Remote Desktop
 
 Start Tailscale:
 
 tailscale up
 
-Get your Tailscale IP:
+Get IP:
 
 tailscale ip
 
-Connect using RDP:
-
-IP: Tailscale IP
-User: aman
-Password: password
-
----
-
-🛡 Security Architecture
-
-Internet
-   │
-   ▼
-Tailscale VPN
-   │
-   ▼
-XRDP Server
-   │
-   ▼
-XFCE Desktop
-
-Public RDP port 3389 blocked for security.
+Connect via RDP.
 
 ---
 
@@ -141,29 +112,11 @@ vps-master-setup
 │
 ├ install.sh
 ├ README.md
-└ .github
-    └ workflows
+└ .github/workflows
         └ script-check.yml
-
----
-
-🧠 Use Cases
-
-- Remote desktop VPS
-- Automation servers
-- AI tools
-- n8n workflows
-- Development environments
-- Disposable monthly VPS
 
 ---
 
 📜 License
 
 MIT License
-
----
-
-⭐ Support
-
-If this project helped you, consider giving it a GitHub Star ⭐
