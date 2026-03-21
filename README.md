@@ -82,11 +82,11 @@ The script creates and modifies the following system paths:
 
 ```bash
 # Option A: Clone the repo
-git clone https://github.com/yourusername/vps-master-setup.git
+git clone https://github.com/technicalboy2023/vps-master-setup.git
 cd vps-master-setup
 
 # Option B: Download directly
-wget https://raw.githubusercontent.com/yourusername/vps-master-setup/main/setup.sh
+wget https://raw.githubusercontent.com/technicalboy2023/vps-master-setup/main/setup.sh
 ```
 
 ### Step 2 — Make it executable
