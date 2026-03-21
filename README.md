@@ -251,7 +251,7 @@ MIT License — free to use, modify, and distribute with attribution.
 
 **Aman**
 
-- 🌐 GitHub: [@yourusername](https://github.com/yourusername)
+- 🌐 GitHub: [@technicalboy2023](https://github.com/technicalboy2023)
 - 💬 Feel free to open issues or PRs for improvements!
 
 ---
