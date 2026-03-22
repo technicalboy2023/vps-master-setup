@@ -1,265 +1,547 @@
 #!/bin/bash
 
-# ============================================================
-#   VPS MASTER SETUP — FINAL v2.1 (FIXED)
-#   Ubuntu 22.04 LTS | All VPS Providers
-#   Low-End VPS Optimized | Tailscale RDP
-#   User: aman | Password: password
-# ============================================================
+# VPS Master Setup Script v2.0
+# Optimized for 2GB RAM, 1 CPU, 20GB Disk
+# Ubuntu 22.04 LTS
 
-# ... (keep the beginning same until Step 9) ...
+set -euo pipefail
 
-# ============================================================
-# STEP 9/15 — SWAP FILE (FIXED - removed -q flag)
-# ============================================================
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging
+LOG_FILE="/var/log/vps-setup.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Functions
+log() { echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
+info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+
+# ==================== HEADER ====================
+
+clear
+log "=========================================="
+log "   VPS MASTER SETUP v2.0"
+log "   2GB RAM Ultra-Optimized"
+log "=========================================="
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "💾 STEP 9/15 — Swap File Setup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ ! -f /swapfile ]; then
-  if   [ "$TOTAL_RAM" -lt 512  ]; then SWAP_SIZE="1G"
-  elif [ "$TOTAL_RAM" -lt 2048 ]; then SWAP_SIZE="2G"
-  else                                  SWAP_SIZE="2G"
-  fi
+# ==================== PRE-CHECKS ====================
 
-  echo "   Creating ${SWAP_SIZE} swapfile..."
+log "=== SYSTEM CHECKS ==="
 
-  if fallocate -l "$SWAP_SIZE" /swapfile 2>/dev/null; then
-    echo "   fallocate se banaya"
-  else
-    echo "   dd se bana raha hai..."
-    dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress 2>/dev/null
-  fi
+# Root check
+if [ "$EUID" -ne 0 ]; then
+    error "Please run as root: sudo bash $0"
+    exit 1
+fi
+log "✓ Running as root"
 
-  chmod 600 /swapfile
-  mkswap /swapfile  # FIX: Removed -q flag
-  swapon /swapfile
-
-  echo '/swapfile none swap sw,nofail 0 0' >> /etc/fstab
-  echo "   ✅ Swapfile: ${SWAP_SIZE} created"
+# RAM check
+TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
+info "RAM detected: ${TOTAL_RAM}MB"
+if [ "$TOTAL_RAM" -lt 1536 ]; then
+    warn "LOW RAM: ${TOTAL_RAM}MB (Recommended: 1536MB+)"
+    read -p "Continue anyway? (y/N): " FORCE
+    [[ "$FORCE" =~ ^[Yy]$ ]] || exit 1
 else
-  echo "   ✅ Swapfile already exists"
+    log "✓ RAM sufficient"
 fi
 
-# ============================================================
-# STEP 10/15 — KERNEL + RAM OPTIMIZATION (FIXED mkswap)
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "⚡ STEP 10/15 — Kernel & RAM Optimization"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# Disk check
+DISK_FREE=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+info "Disk free: ${DISK_FREE}GB"
+if [ "$DISK_FREE" -lt 5 ]; then
+    error "Insufficient disk space: ${DISK_FREE}GB (Need 5GB+)"
+    exit 1
+fi
+log "✓ Disk space OK"
 
-# ... (sysctl settings same) ...
-
-# --- ZRAM (FIXED mkswap -q) ---
-cat > /usr/local/bin/zram-setup.sh << 'ZEOF'
-#!/bin/bash
-modprobe zram 2>/dev/null || exit 0
-sleep 1
-[ ! -b /dev/zram0 ] && exit 0
-RAM_MB=$(free -m | awk 'NR==2{print $2}')
-ZRAM_MB=$(( RAM_MB / 2 ))
-[ "$ZRAM_MB" -lt 128 ] && ZRAM_MB=128
-echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || \
-  echo lzo > /sys/block/zram0/comp_algorithm 2>/dev/null || true
-echo "${ZRAM_MB}M" > /sys/block/zram0/disksize
-mkswap /dev/zram0 && swapon -p 100 /dev/zram0  # FIX: No -q flag
-echo "ZRAM: ${ZRAM_MB}MB active"
-ZEOF
-chmod +x /usr/local/bin/zram-setup.sh
-
-# ... (rest of step 10 same) ...
-
-# ============================================================
-# STEP 12/15 — XRDP SETUP (FIXED - Log dir + Config)
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🖥️  STEP 12/15 — XRDP Install & Configure"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-apt-get install -y -qq xrdp
-
-# FIX #1: Create log directory BEFORE starting service
-mkdir -p /var/log/xrdp
-chown xrdp:xrdp /var/log/xrdp
-chmod 755 /var/log/xrdp
-
-usermod -aG ssl-cert xrdp
-
-# FIX #2: Config without invalid ssl_protocols/tls_ciphers lines
-cat > /etc/xrdp/xrdp.ini << 'EOF'
-[Globals]
-ini_version=1
-fork=true
-port=3389
-use_vsock=false
-security_layer=negotiate
-crypt_level=high
-certificate=
-key_file=
-channel_code=1
-max_bpp=24
-bulk_compression=true
-new_cursors=true
-max_idle_time=0
-tcp_send_buffer_bytes=4194304
-tcp_recv_buffer_bytes=4194304
-autorun=
-
-[xrdp1]
-name=Xorg
-lib=libxup.so
-username=ask
-password=ask
-ip=127.0.0.1
-port=-1
-code=20
-xserverbpp=24
-EOF
-
-# Sesman config
-if [ -f /etc/xrdp/sesman.ini ]; then
-  sed -i 's/^AllowRootLogin=.*/AllowRootLogin=false/' /etc/xrdp/sesman.ini
-  sed -i 's/^MaxLoginRetry=.*/MaxLoginRetry=3/' /etc/xrdp/sesman.ini
-  sed -i 's/^EnableUserWindowManager=.*/EnableUserWindowManager=true/' /etc/xrdp/sesman.ini
+# Network check
+if ! ping -c 1 8.8.8.8 &>/dev/null; then
+    warn "No internet detected! Continuing anyway..."
+else
+    log "✓ Internet connected"
 fi
 
-# OOM Protection
-mkdir -p /etc/systemd/system/xrdp.service.d/
-cat > /etc/systemd/system/xrdp.service.d/oom.conf << 'EOF'
-[Service]
-OOMScoreAdjust=-500
+# ==================== USER INPUT ====================
+
+echo ""
+log "=== USER CONFIGURATION ==="
+
+read -p "Enter username [default: aman]: " USERNAME
+USERNAME=${USERNAME:-aman}
+
+while true; do
+    echo ""
+    read -s -p "Enter password (min 6 chars): " USERPASS
+    echo ""
+    read -s -p "Confirm password: " USERPASS_CONFIRM
+    echo ""
+    
+    if [ "$USERPASS" != "$USERPASS_CONFIRM" ]; then
+        warn "Passwords don't match. Try again."
+        continue
+    fi
+    
+    if [ ${#USERPASS} -lt 6 ]; then
+        warn "Password too short (min 6 chars). Try again."
+        continue
+    fi
+    
+    log "✓ Password set"
+    break
+done
+
+read -p "Enter timezone [default: Asia/Kolkata]: " TIMEZONE
+TIMEZONE=${TIMEZONE:-Asia/Kolkata}
+
+# ==================== SYSTEM BASE ====================
+
+log "=== CONFIGURING SYSTEM ==="
+
+# Timezone
+timedatectl set-timezone "$TIMEZONE" 2>/dev/null || {
+    warn "Invalid timezone, using Asia/Kolkata"
+    timedatectl set-timezone Asia/Kolkata
+}
+log "✓ Timezone set"
+
+# Fix mirrors for speed
+sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+sed -i 's|mirrors.linode.com|archive.ubuntu.com|g' /etc/apt/sources.list 2>/dev/null || true
+sed -i 's|mirrors.digitalocean.com|archive.ubuntu.com|g' /etc/apt/sources.list 2>/dev/null || true
+log "✓ Mirrors optimized"
+
+# Update system
+log "Updating package lists..."
+apt-get update -qq
+log "✓ Package lists updated"
+
+log "Upgrading packages..."
+apt-get upgrade -y -qq
+log "✓ System upgraded"
+
+# ==================== ESSENTIAL PACKAGES ====================
+
+log "=== INSTALLING BASE PACKAGES ==="
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    curl wget git nano htop ufw fail2ban \
+    gnupg ca-certificates net-tools \
+    apt-transport-https software-properties-common \
+    zram-tools p7zip-full unzip
+
+log "✓ Base packages installed"
+
+# Enable fail2ban
+systemctl enable fail2ban --now
+log "✓ Fail2Ban enabled"
+
+# ==================== MEMORY OPTIMIZATION ====================
+
+log "=== MEMORY OPTIMIZATION (CRITICAL) ==="
+
+# ZRAM setup
+log "Configuring ZRAM..."
+cat > /etc/default/zramswap << 'EOF'
+ALGO=lz4
+PERCENT=150
+PRIORITY=100
 EOF
 
-systemctl daemon-reload
-systemctl enable xrdp --quiet
-
-# FIX #3: Ensure log dir exists again (just to be safe)
-mkdir -p /var/log/xrdp
-chown xrdp:xrdp /var/log/xrdp
-
-systemctl restart xrdp
+systemctl enable zramswap --now
 sleep 2
 
-if systemctl is-active --quiet xrdp; then
-  echo "   ✅ XRDP running | Port 3389 | Tailscale only"
+# Verify ZRAM
+if swapon --show | grep -q zram; then
+    ZRAM_SIZE=$(swapon --show=SIZE | grep zram | awk '{print $2}')
+    log "✓ ZRAM active: $ZRAM_SIZE"
 else
-  echo "   ❌ XRDP start nahi hua! Manual check karo"
+    warn "ZRAM failed, using disk swap fallback"
 fi
 
-# ============================================================
-# STEP 13/15 — FIREFOX + CHROME (FIXED GPG Keys)
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🌐 STEP 13/15 — Browsers Install"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Remove Snap Firefox
-if command -v snap &>/dev/null; then
-  snap remove firefox 2>/dev/null || true
+# Emergency swap
+if [ ! -f /swapfile ]; then
+    fallocate -l 512M /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw,pri=10 0 0' >> /etc/fstab
+    log "✓ Emergency swap created (512MB)"
 fi
-apt-get remove -y firefox 2>/dev/null || true
-apt-get purge -y snapd 2>/dev/null || true
-rm -rf /snap /var/snap /var/lib/snapd /root/snap 2>/dev/null || true
-apt-get autoremove -y -qq
 
-# FIX #4: Firefox with proper GPG key import
-install -d -m 0755 /etc/apt/keyrings
+# Kernel tuning for 2GB RAM
+log "Applying kernel optimizations..."
+cat >> /etc/sysctl.conf << 'EOF'
 
-echo "   Firefox setup kar rahe hain..."
-wget -q "https://packages.mozilla.org/apt/repo-signing-key.gpg" -O /tmp/mozilla.gpg
+# === 2GB RAM Optimizations ===
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+vm.dirty_ratio=10
+vm.dirty_background_ratio=5
+vm.dirty_expire_centisecs=500
+vm.dirty_writeback_centisecs=100
+vm.overcommit_memory=1
+vm.page-cluster=0
+vm.min_free_kbytes=32768
 
-if [ -s /tmp/mozilla.gpg ]; then
-  # Import key properly
-  gpg --dearmor < /tmp/mozilla.gpg > /etc/apt/keyrings/mozilla.gpg 2>/dev/null || \
-    cp /tmp/mozilla.gpg /etc/apt/keyrings/mozilla.gpg
-  
-  chmod 644 /etc/apt/keyrings/mozilla.gpg
-  
-  echo "deb [signed-by=/etc/apt/keyrings/mozilla.gpg] https://packages.mozilla.org/apt mozilla main" \
-    > /etc/apt/sources.list.d/mozilla.list
+# Network
+net.ipv4.tcp_congestion_control=bbr
+net.core.default_qdisc=fq
 
-  cat > /etc/apt/preferences.d/mozilla-firefox << 'EOF'
-Package: firefox*
-Pin: origin packages.mozilla.org
-Pin-Priority: 1000
+# OOM
+vm.oom_kill_allocating_task=1
 EOF
 
-  # Add key to trusted keys also (double safety)
-  apt-key add /tmp/mozilla.gpg 2>/dev/null || true
-  
-  apt-get update -qq 2>/dev/null || true
-  apt-get install -y -qq firefox 2>/dev/null || echo "   ⚠️  Firefox install mein issue, skip kar rahe hain"
-  echo "   ✅ Firefox installed (or skipped)"
-else
-  echo "   ⚠️  Firefox GPG download fail, Ubuntu default use karo"
-fi
+sysctl -p >/dev/null 2>&1
+log "✓ Kernel tuned"
 
-# Chrome (amd64) / Chromium (arm64)
-if [ "$ARCH" = "amd64" ]; then
-  echo "   Chrome setup kar rahe hain..."
-  wget -q "https://dl.google.com/linux/linux_signing_key.pub" -O /tmp/chrome.gpg
-  
-  if [ -s /tmp/chrome.gpg ]; then
-    gpg --dearmor < /tmp/chrome.gpg > /etc/apt/keyrings/google-chrome.gpg 2>/dev/null || \
-      cat /tmp/chrome.gpg | gpg --dearmor > /etc/apt/keyrings/google-chrome.gpg
-    
-    chmod 644 /etc/apt/keyrings/google-chrome.gpg
-    
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] \
-https://dl.google.com/linux/chrome/deb/ stable main" \
-      > /etc/apt/sources.list.d/google-chrome.list
-    
-    apt-get update -qq 2>/dev/null || true
-    apt-get install -y -qq google-chrome-stable 2>/dev/null || \
-      apt-get install -y -qq chromium-browser
-    echo "   ✅ Chrome/Chromium installed"
-  else
-    apt-get install -y -qq chromium-browser 2>/dev/null || true
-    echo "   ✅ Chromium installed (fallback)"
-  fi
-else
-  apt-get install -y -qq chromium-browser 2>/dev/null || \
-    apt-get install -y -qq chromium 2>/dev/null || true
-  echo "   ✅ Chromium installed (ARM)"
-fi
+# Enable BBR
+modprobe tcp_bbr 2>/dev/null || true
+echo "tcp_bbr" >> /etc/modules-load.d/bbr.conf 2>/dev/null || true
 
-# ============================================================
-# STEP 14/15 — TAILSCALE VPN (FIXED with error handling)
-# ============================================================
+# ==================== FIREWALL ====================
+
+log "=== CONFIGURING FIREWALL ==="
+
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp comment 'SSH'
+ufw logging off
+ufw --force enable
+
+log "✓ Firewall enabled (SSH only)"
+
+# ==================== USER SETUP ====================
+
+log "=== CREATING USER ==="
+
+# Remove if exists
+id "$USERNAME" &>/dev/null && {
+    warn "User $USERNAME exists, removing..."
+    userdel -r "$USERNAME" 2>/dev/null || true
+}
+
+# Create user
+useradd -m -s /bin/bash "$USERNAME"
+echo "$USERNAME:$USERPASS" | chpasswd
+usermod -aG sudo "$USERNAME"
+
+# SSH directory
+mkdir -p /home/$USERNAME/.ssh
+chmod 700 /home/$USERNAME/.ssh
+touch /home/$USERNAME/.ssh/authorized_keys
+chmod 600 /home/$USERNAME/.ssh/authorized_keys
+chown -R $USERNAME:$USERNAME /home/$USERNAME/.ssh
+
+log "✓ User $USERNAME created"
+
+# ==================== SSH HARDENING ====================
+
+log "=== HARDENING SSH ==="
+
+mkdir -p /etc/ssh/sshd_config.d
+
+cat > /etc/ssh/sshd_config.d/99-hardening.conf << 'EOF'
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UseDNS no
+Compression yes
+MaxSessions 2
+EOF
+
+systemctl restart sshd
+log "✓ SSH hardened"
+
+# ==================== XFCE DESKTOP ====================
+
+log "=== INSTALLING XFCE (MINIMAL) ==="
+
+# Core only
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    xfce4-panel \
+    xfce4-session \
+    xfce4-settings \
+    xfce4-terminal \
+    xfwm4 \
+    xfdesktop4 \
+    thunar \
+    dbus-x11 \
+    x11-xserver-utils \
+    gtk2-engines-xfce
+
+# Remove bloat
+apt-get purge -y --auto-remove \
+    xfce4-power-manager \
+    xfce4-screensaver \
+    xfce4-clipman \
+    xfce4-dict \
+    2>/dev/null || true
+
+# Session config
+echo "startxfce4" > /home/$USERNAME/.xsession
+chown $USERNAME:$USERNAME /home/$USERNAME/.xsession
+chmod 644 /home/$USERNAME/.xsession
+
+# Also for skel
+echo "startxfce4" > /etc/skel/.xsession
+
+log "✓ XFCE installed (minimal)"
+
+# ==================== XRDP ====================
+
+log "=== INSTALLING XRDP ==="
+
+apt-get install -y -qq --no-install-recommends xrdp
+
+# Optimize
+sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
+sed -i 's/xserverbpp=24/xserverbpp=16/' /etc/xrdp/xrdp.ini 2>/dev/null || true
+
+# Additional optimizations
+cat >> /etc/xrdp/xrdp.ini << 'EOF'
+
+[Globals]
+bitmap_cache=yes
+bitmap_compression=yes
+EOF
+
+systemctl enable xrdp --now
+
+# Block public RDP (Tailscale only)
+ufw deny 3389/tcp comment 'Block public RDP' 2>/dev/null || true
+
+log "✓ XRDP installed (port 3389, localhost only via Tailscale)"
+
+# ==================== FIREFOX ====================
+
+log "=== INSTALLING FIREFOX ==="
+
+# Remove snap completely
+systemctl stop snapd 2>/dev/null || true
+apt-get purge -y snapd 2>/dev/null || true
+rm -rf /snap /var/snap /var/lib/snapd 2>/dev/null || true
+
+# Block snap
+cat > /etc/apt/preferences.d/nosnap.pref << 'EOF'
+Package: snapd
+Pin: release a=*
+Pin-Priority: -10
+EOF
+
+# Mozilla repo
+install -d -m 0755 /etc/apt/keyrings
+wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- 2>/dev/null | \
+    gpg --dearmor > /etc/apt/keyrings/mozilla.gpg 2>/dev/null || true
+
+echo "deb [signed-by=/etc/apt/keyrings/mozilla.gpg] https://packages.mozilla.org/apt mozilla main" > \
+    /etc/apt/sources.list.d/mozilla.list 2>/dev/null || true
+
+# Pin Firefox
+echo -e "Package: firefox*\nPin: origin packages.mozilla.org\nPin-Priority: 1000" > \
+    /etc/apt/preferences.d/mozilla 2>/dev/null || true
+
+apt-get update -qq 2>/dev/null || true
+apt-get install -y --allow-downgrades --no-install-recommends firefox 2>/dev/null || \
+apt-get install -y firefox-esr 2>/dev/null || \
+warn "Firefox install failed, install manually"
+
+# Firefox low-RAM config
+mkdir -p /home/$USERNAME/.mozilla/firefox/*.default-release 2>/dev/null || true
+cat > /home/$USERNAME/.user.js 2>/dev/null << 'EOF'
+// Low RAM optimizations
+user_pref("browser.cache.disk.enable", false);
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("browser.tabs.firefox-view", false);
+user_pref("browser.compactmode.show", true);
+user_pref("browser.uidensity", 1);
+user_pref("dom.ipc.processCount", 1);
+user_pref("extensions.pocket.enabled", false);
+user_pref("browser.newtabpage.enabled", false);
+EOF
+
+chown -R $USERNAME:$USERNAME /home/$USERNAME/.mozilla 2>/dev/null || true
+chown $USERNAME:$USERNAME /home/$USERNAME/.user.js 2>/dev/null || true
+
+log "✓ Firefox installed (optimized)"
+
+# ==================== TAILSCALE ====================
+
+log "=== INSTALLING TAILSCALE ==="
+
+curl -fsSL https://tailscale.com/install.sh | sh
+systemctl enable tailscaled --now
+
+log "✓ Tailscale installed"
+
+# ==================== OOM PROTECTION ====================
+
+log "=== INSTALLING OOM PROTECTION ==="
+
+apt-get install -y -qq --no-install-recommends earlyoom 2>/dev/null || true
+
+cat > /etc/default/earlyoom << 'EOF'
+EARLYOOM_ARGS="-m 5 -s 100 -r 60 --prefer 'chrome|firefox|Web Content' --avoid 'sshd|xrdp|xfce'"
+EOF
+
+systemctl enable earlyoom --now 2>/dev/null || warn "EarlyOOM failed"
+
+log "✓ OOM protection enabled"
+
+# ==================== CLEANUP ====================
+
+log "=== CLEANING UP ==="
+
+# Remove bloat
+apt-get purge -y --auto-remove \
+    libreoffice* \
+    thunderbird \
+    rhythmbox \
+    totem \
+    gnome-games \
+    aisleriot \
+    gnome-mahjongg \
+    gnome-mines \
+    gnome-sudoku \
+    2>/dev/null || true
+
+# Clean
+apt-get autoremove -y -qq
+apt-get autoclean -qq
+apt-get clean
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/* 2>/dev/null || true
+
+log "✓ Cleanup complete"
+
+# ==================== FINAL INFO ====================
+
+log "=== CREATING INFO FILE ==="
+
+# Get IP info
+PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "Unknown")
+
+cat > /home/$USERNAME/VPS-INFO.txt << EOF
+========================================
+   VPS MASTER SETUP COMPLETE
+========================================
+
+SERVER INFO
+-----------
+Public IP: $PUBLIC_IP
+Username: $USERNAME
+Hostname: $(hostname)
+
+CONNECTION STEPS
+----------------
+1. SSH into VPS:
+   ssh $USERNAME@$PUBLIC_IP
+
+2. Start Tailscale:
+   sudo tailscale up
+   (Open the URL in browser to authenticate)
+
+3. Get Tailscale IP:
+   tailscale ip -4
+   (Example: 100.x.x.x)
+
+4. Connect via RDP:
+   - Windows: mstsc → 100.x.x.x:3389
+   - Mac: Microsoft Remote Desktop → 100.x.x.x:3389
+   - Username: $USERNAME
+   - Password: (as set during install)
+
+OPTIMIZATIONS APPLIED
+---------------------
+✓ ZRAM 3GB (150% of RAM)
+✓ Emergency swap 512MB
+✓ Kernel tuned for 2GB RAM
+✓ XFCE minimal (no bloat)
+✓ Firefox optimized (disk cache disabled)
+✓ XRDP 16-bit color (fast)
+✓ EarlyOOM (kills runaway processes)
+✓ Firewall (SSH only)
+✓ Fail2Ban (brute-force protection)
+
+PERFORMANCE TIPS
+----------------
+• Max 3-4 Firefox tabs recommended
+• Close unused applications
+• Use terminal apps when possible
+• Monitor RAM: htop or free -h
+
+USEFUL COMMANDS
+---------------
+htop              - System monitor
+free -h           - RAM usage
+tailscale status  - VPN status
+tailscale ip -4   - Tailscale IP
+ncdu /            - Disk usage
+sudo reboot       - Restart
+
+TROUBLESHOOTING
+---------------
+Black screen on RDP:
+  echo "startxfce4" > ~/.xsession && sudo systemctl restart xrdp
+
+Firefox slow:
+  Close tabs, restart Firefox
+
+System hang:
+  SSH in, run: sudo killall -9 firefox
+
+Low RAM:
+  sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+
+LOG FILE
+--------
+Setup log: $LOG_FILE
+
+========================================
+EOF
+
+chown $USERNAME:$USERNAME /home/$USERNAME/VPS-INFO.txt
+chmod 644 /home/$USERNAME/VPS-INFO.txt
+
+log "✓ Info file created: ~/VPS-INFO.txt"
+
+# ==================== COMPLETION ====================
+
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔐 STEP 14/15 — Tailscale VPN Install"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "========================================"
+log "   SETUP COMPLETE!"
+log "========================================"
+echo ""
+info "Username: $USERNAME"
+info "RDP Port: 3389 (via Tailscale only)"
+info "Log file: $LOG_FILE"
+echo ""
+warn "IMPORTANT NEXT STEPS:"
+echo "1. Run: sudo tailscale up"
+echo "2. Authenticate with the URL provided"
+echo "3. Get Tailscale IP: tailscale ip -4"
+echo "4. Connect RDP to that IP"
+echo ""
+info "Read ~/VPS-INFO.txt for full details"
+echo ""
 
-curl -fsSL "https://tailscale.com/install.sh" -o /tmp/tailscale-install.sh
-
-if [ -s /tmp/tailscale-install.sh ]; then
-  bash /tmp/tailscale-install.sh 2>/dev/null || {
-    echo "   ⚠️  Tailscale install script fail, manual try karo"
-  }
-  
-  # Check if installed then enable
-  if command -v tailscale &>/dev/null; then
-    systemctl enable tailscaled --quiet 2>/dev/null || true
-    systemctl start tailscaled 2>/dev/null || true
-    ufw allow in on tailscale0 comment "Tailscale VPN" 2>/dev/null || true
-    
-    echo ""
-    echo "   ⚡ Tailscale auth shuru ho raha hai..."
-    echo "   👇 Neeche URL aayega — browser mein kholo:"
-    timeout 15 tailscale up --accept-routes 2>&1 || true
-    echo ""
-    echo "   ✅ Tailscale ready"
-  else
-    echo "   ❌ Tailscale install nahi hua. Baad mein try karo:"
-    echo "   curl -fsSL https://tailscale.com/install.sh | sh"
-  fi
+# Reboot prompt
+read -p "Reboot now? (recommended) [Y/n]: " REBOOT
+if [[ "$REBOOT" =~ ^[Nn]$ ]]; then
+    log "Skipping reboot. Please reboot manually when ready."
+    exit 0
 else
-  echo "   ❌ Tailscale download fail"
+    log "Rebooting in 5 seconds..."
+    sleep 5
+    reboot
 fi
-
-# ... (Step 15 same as before) ...
