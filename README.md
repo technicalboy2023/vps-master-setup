@@ -343,6 +343,7 @@ The script already includes the fix, but if you still see a black screen:
 
 ```bash
 # SSH into VPS and run:
+sudo apt install xfce4-session -y
 echo "startxfce4" > /home/aman/.xsession
 chown aman:aman /home/aman/.xsession
 sudo systemctl restart xrdp
